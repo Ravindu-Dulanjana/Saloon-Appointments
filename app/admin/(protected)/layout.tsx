@@ -1,15 +1,12 @@
 import Link from 'next/link';
-import { headers } from 'next/headers';
 import { requireAdmin } from '@/lib/auth';
 import { signOut } from './actions';
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  // Skip auth check on the login page itself
-  const pathname = headers().get('x-invoke-path') ?? '';
-  if (pathname.endsWith('/admin/login')) {
-    return <>{children}</>;
-  }
-
+export default async function ProtectedAdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const user = await requireAdmin();
 
   return (
