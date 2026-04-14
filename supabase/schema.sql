@@ -101,9 +101,10 @@ create table if not exists conversation_sessions (
 -- Honours schedule_exceptions over working_hours.
 -- ============================================================================
 create or replace function get_available_slots(
-  p_date         date,
-  p_duration     int,
-  p_step_minutes int default 15
+  p_date                   date,
+  p_duration               int,
+  p_step_minutes           int default 15,
+  p_exclude_appointment_id uuid default null
 )
 returns table (slot_start timestamptz)
 language plpgsql
@@ -145,10 +146,11 @@ begin
 
     -- Skip past-time slots (grace: 5 min)
     if v_slot_start >= now() + interval '5 minutes' then
-      -- No overlap with any non-cancelled appointment?
+      -- No overlap with any non-cancelled appointment (optionally excluding one)?
       if not exists (
         select 1 from appointments a
         where a.status <> 'cancelled'
+          and (p_exclude_appointment_id is null or a.id <> p_exclude_appointment_id)
           and tstzrange(a.start_at, a.end_at, '[)') && tstzrange(v_slot_start, v_slot_end, '[)')
       ) then
         slot_start := v_slot_start;

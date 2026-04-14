@@ -95,24 +95,72 @@ Two users could be shown the same slot at the same time. The `appointments_no_ov
 
 ```
 app/
-  layout.tsx
-  page.tsx
+  layout.tsx                          # global Tailwind + html shell
+  page.tsx                            # public landing
+  globals.css                         # Tailwind directives
   api/
-    twilio/webhook/route.ts   # Twilio inbound webhook → TwiML reply
-    cron/reminders/route.ts   # Vercel Cron → WhatsApp reminders
+    twilio/webhook/route.ts           # Twilio inbound webhook → TwiML reply
+    cron/reminders/route.ts           # Vercel Cron → WhatsApp reminders
+  auth/
+    callback/route.ts                 # Supabase magic-link code exchange
+  admin/
+    layout.tsx                        # admin chrome (nav, sign out)
+    page.tsx                          # appointments list
+    actions.ts                        # server actions: cancel, reschedule, name, signOut
+    CancelButton.tsx                  # client component
+    login/page.tsx                    # magic-link request form
+    appointments/[id]/page.tsx        # appointment detail
+    appointments/[id]/RescheduleForm.tsx
+    customers/page.tsx                # customer search + list
+    customers/[id]/page.tsx           # customer detail + history
+    customers/[id]/CustomerNameForm.tsx
 lib/
-  supabase.ts                 # service-role client
-  twilio.ts                   # outbound send + TwiML + signature validation
+  supabase.ts                         # service-role client (bot + admin writes)
+  supabaseServer.ts                   # @supabase/ssr server client (auth)
+  supabaseBrowser.ts                  # @supabase/ssr browser client (auth)
+  auth.ts                             # requireAdmin / isAdminEmail
+  format.ts                           # date/time formatters in salon timezone
+  twilio.ts                           # outbound send + TwiML + signature validation
   booking/
-    parseDate.ts              # "tomorrow" / "YYYY-MM-DD" / weekday parser
-    session.ts                # conversation_sessions get/set/reset
-    slots.ts                  # services, RPC, customer + appointment writes
-    flow.ts                   # state-machine message handler
+    parseDate.ts                      # "tomorrow" / "YYYY-MM-DD" / weekday parser
+    session.ts                        # conversation_sessions get/set/reset
+    slots.ts                          # services, RPC, customer + appointment writes
+    flow.ts                           # state-machine message handler
+middleware.ts                         # refresh auth cookies + protect /admin/*
 supabase/
-  schema.sql                  # full DDL + RPC + seed
-vercel.json                   # cron config
+  schema.sql                          # full DDL + RPC + seed + RLS
+tailwind.config.ts
+postcss.config.js
+vercel.json                           # cron config
 .env.example
 ```
+
+## Admin dashboard
+
+Visit `/admin` to manage bookings. Pages:
+
+- `/admin` — upcoming appointments, filter by status, cancel or open for editing
+- `/admin/appointments/[id]` — full detail + reschedule via date picker (uses the same `get_available_slots` RPC, excluding the current booking)
+- `/admin/customers` — searchable list of all customers
+- `/admin/customers/[id]` — edit customer name, view their full appointment history
+
+### Auth — Supabase magic link
+The dashboard is protected by Supabase Auth (email magic link) with an admin allowlist.
+
+**Setup:**
+1. In Supabase dashboard → **Authentication → Providers → Email** — make sure "Enable Email provider" is on.
+2. **Authentication → URL Configuration** → add your site URL and the callback to **Redirect URLs**:
+   - `http://localhost:3000/auth/callback`
+   - `https://your-vercel-domain.vercel.app/auth/callback`
+3. Add to `.env.local` (and Vercel env vars):
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` (from Supabase **Project Settings → API**)
+   - `ADMIN_EMAILS=you@example.com,partner@example.com` — comma-separated allowlist
+4. Visit `/admin/login`, enter your email, click the magic link in your inbox.
+
+`middleware.ts` redirects any unauthenticated visit to `/admin/*` back to the login page. After login, `lib/auth.ts#requireAdmin` also checks the email is in `ADMIN_EMAILS` (a Supabase user with a non-allowlisted email gets bounced).
+
+### Reschedule safety
+Rescheduling reuses the `get_available_slots` RPC with `p_exclude_appointment_id` so the current booking doesn't block its own time grid. The Postgres exclusion constraint on `appointments` still prevents two admins (or admin + bot) from picking the same slot at once — the second action gets a `23P01` error which the UI surfaces as "That slot conflicts with another appointment."
 
 ## Extending
 

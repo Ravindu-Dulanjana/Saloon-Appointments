@@ -23,12 +23,14 @@ export async function getAvailableSlots(
   dateIso: string,         // YYYY-MM-DD
   durationMinutes: number,
   stepMinutes = 15,
+  excludeAppointmentId?: string,
 ): Promise<string[]> {
   const sb = getSupabase();
   const { data, error } = await sb.rpc('get_available_slots', {
     p_date: dateIso,
     p_duration: durationMinutes,
     p_step_minutes: stepMinutes,
+    p_exclude_appointment_id: excludeAppointmentId ?? null,
   });
   if (error) throw error;
   return (data ?? []).map((r: { slot_start: string }) => r.slot_start);
